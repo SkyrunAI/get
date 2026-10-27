@@ -1,5 +1,5 @@
 #!/bin/sh
-# curl -fsSL https://raw.githubusercontent.com/SkyrunAI/get/main/bootstrap.sh | sh -s -- <name>
+# curl -fsSL https://raw.githubusercontent.com/SkyrunAI/get/main/rookery1-bootstrap.sh | sh -s -- <name>
 
 set -eu
 
