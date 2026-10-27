@@ -16,9 +16,15 @@ KEY=/etc/skyrun/id_ed25519
 
 [ "$(id -u)" -eq 0 ] || { echo "run this as root" >&2; exit 1; }
 
+# ansible comes from pip, not the distro. Ubuntu 22.04 ships ansible 2.10, whose
+# filter plugins import environmentfilter — removed in Jinja2 3.1 — and a Jetson
+# that has ever pip installed anything already has a newer Jinja2, so every
+# template fails at parse time. --break-system-packages is accepted whether or
+# not the distro marks its python externally managed.
 echo "== installing what an update needs"
 apt-get update -q
-DEBIAN_FRONTEND=noninteractive apt-get install -yq ansible git curl
+DEBIAN_FRONTEND=noninteractive apt-get install -yq git curl python3-pip
+python3 -m pip install --break-system-packages --upgrade ansible-core
 
 # No key, no pull. Make one, print it, and stop — a person has to add it, and
 # that is the only point in this where the board waits on someone.
