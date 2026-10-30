@@ -1,4 +1,5 @@
 #!/bin/sh
+# export ROOKERY2_DEPLOY_KEY="$(cat <the fleet deploy key>)"
 # curl -fsSL https://raw.githubusercontent.com/SkyrunAI/get/main/jetson.sh | sh
 #
 # Enrol a Jetson into rookery2. A Jetson arrives with L4T already on it, so
@@ -35,28 +36,31 @@ ansible-galaxy collection install community.docker
 # Jetson it may be the vendor's.
 command -v docker >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -yq docker.io
 
-# No key, no pull. Make one, print it, and stop — a person has to add it, and
-# that is the only point in this where the board waits on someone.
+# One read-only deploy key serves the whole fleet — the same one the image bakes
+# into a card. A board that minted its own would wait on a rookery2 admin to
+# register it, which is an admin for every board.
 install -d -m 700 /etc/skyrun
 if [ ! -f "$KEY" ]; then
-    ssh-keygen -q -t ed25519 -N '' -C "rookery2@$(cat /etc/machine-id)" -f "$KEY"
-    cat <<MSG
-
-New deploy key. Add it READ-ONLY at:
-  https://github.com/SkyrunAI/rookery2/settings/keys
-
-$(cat "$KEY.pub")
-
-Then run this line again.
-MSG
-    exit 0
+    if [ -z "${ROOKERY2_DEPLOY_KEY:-}" ]; then
+        echo "no key at $KEY and ROOKERY2_DEPLOY_KEY is unset" >&2
+        exit 1
+    fi
+    printf '%s\n' "$ROOKERY2_DEPLOY_KEY" > "$KEY"
+    chmod 600 "$KEY"
 fi
+echo "$REPO" > /etc/skyrun/rookery2-repo
 
 # The first update. It names the board from its serial, writes the identity
 # record, and installs rookery2-update and rookery2-auto-update.
+#
+# Through rookery2-update rather than ansible-pull directly: that script is how
+# a board updates every other time, so running it here means one answer to the
+# question instead of two that drift.
 echo "== first update"
 export GIT_SSH_COMMAND="ssh -i $KEY -o StrictHostKeyChecking=accept-new"
-ansible-pull -U "$REPO" -C main -d /var/lib/rookery2 local.yml
+[ -d /var/lib/rookery2/.git ] || git clone -q "$REPO" /var/lib/rookery2
+install -m 755 /var/lib/rookery2/ansible/roles/update/files/rookery2-update /usr/local/sbin/
+rookery2-update
 
 # After the update, so it registers under the name the board just took rather
 # than whatever L4T shipped with.
