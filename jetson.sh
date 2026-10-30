@@ -11,7 +11,7 @@
 # the rest, so that enrolment is described in one place and this stays short.
 set -eu
 
-FLEET="${ROOKERY2_FLEET:-rookery2:5000}"
+FLEET="${ROOKERY2_FLEET:-rookery2.tailbff67c.ts.net:5000}"
 
 [ "$(id -u)" -eq 0 ] || { echo "run this as root" >&2; exit 1; }
 
@@ -55,13 +55,13 @@ tailscale up --ssh --advertise-tags=tag:vehicle \
 # died on "Could not resolve host: rookery2" a second later.
 echo "== waiting for the fleet"
 i=0
-while [ $i -lt 30 ] && ! curl -fsS -o /dev/null --max-time 5 "http://$FLEET/state"; do
+while [ $i -lt 30 ] && ! curl -fsS -o /dev/null --max-time 5 "https://$FLEET/state"; do
     i=$((i + 1)); sleep 2
 done
 
 echo "== first update"
 install -d /var/lib/rookery2
-curl -fsS "http://$FLEET/state" | tar -xzf - -C /var/lib/rookery2
+curl -fsS "https://$FLEET/state" | tar -xzf - -C /var/lib/rookery2
 install -m 755 /var/lib/rookery2/ansible/roles/update/files/rookery2-update /usr/local/sbin/
 rookery2-update
 

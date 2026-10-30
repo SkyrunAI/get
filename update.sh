@@ -10,7 +10,7 @@
 # A board whose sudo wants a password takes it in SUDO_PW, the same way.
 set -eu
 
-FLEET="${ROOKERY2_FLEET:-rookery2:5000}"
+FLEET="${ROOKERY2_FLEET:-rookery2.tailbff67c.ts.net:5000}"
 
 [ $# -eq 1 ] || { echo "usage: update.sh <user@address>" >&2; exit 1; }
 
@@ -24,7 +24,7 @@ FLEET="${ROOKERY2_FLEET:-rookery2:5000}"
 REMOTE='
 set -eu
 d=$(mktemp -d)
-curl -fsS "http://$FLEET/state" | tar -xzf - -C "$d"
+curl -fsS "https://$FLEET/state" | tar -xzf - -C "$d"
 install -m 755 "$d/ansible/roles/update/files/rookery2-update" /usr/local/sbin/
 rm -rf "$d"
 rookery2-update
