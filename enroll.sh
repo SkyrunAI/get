@@ -8,6 +8,8 @@
 #
 # The key is read from your environment and never passed as an argument: argv is
 # world-readable through /proc, and this key enrols a node as tag:vehicle.
+#
+# Pass ssh anything it needs in SSH_OPTS, e.g. SSH_OPTS="-i ~/.ssh/board_key".
 set -eu
 
 JETSON=https://raw.githubusercontent.com/SkyrunAI/get/main/jetson.sh
@@ -25,4 +27,4 @@ JETSON=https://raw.githubusercontent.com/SkyrunAI/get/main/jetson.sh
 {
     printf "TS_AUTHKEY='%s'\nexport TS_AUTHKEY\n" "$TS_AUTHKEY"
     curl -fsSL "$JETSON"
-} | ssh "$1" 'sudo sh -s'
+} | ssh ${SSH_OPTS:-} "$1" 'sudo sh -s'
