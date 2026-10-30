@@ -8,6 +8,9 @@
 #
 # The key is read from your environment and never passed as an argument: argv is
 # world-readable through /proc, and this key enrols a node as tag:vehicle.
+#
+# Pass ssh anything it needs in SSH_OPTS, e.g. SSH_OPTS="-i ~/.ssh/board_key".
+# A board whose sudo wants a password takes it in SUDO_PW, the same way.
 set -eu
 
 JETSON=https://raw.githubusercontent.com/SkyrunAI/get/main/jetson.sh
@@ -22,7 +25,20 @@ JETSON=https://raw.githubusercontent.com/SkyrunAI/get/main/jetson.sh
 #
 # The key goes down the pipe ahead of the script, so it is on no command line at
 # either end, and jetson.sh follows it the same way.
+# sudo -S reads its password from the first line and hands the rest to the
+# shell, so a password rides the same stream as the key and the script and is on
+# no command line either. A board with passwordless sudo wants no first line.
+if [ -n "${SUDO_PW:-}" ]; then
+    elevate='sudo -S -p "" sh -s'
+    password="$SUDO_PW
+"
+else
+    elevate='sudo sh -s'
+    password=""
+fi
+
 {
+    printf '%s' "$password"
     printf "TS_AUTHKEY='%s'\nexport TS_AUTHKEY\n" "$TS_AUTHKEY"
     curl -fsSL "$JETSON"
-} | ssh "$1" 'sudo sh -s'
+} | ssh ${SSH_OPTS:-} "$1" "$elevate"

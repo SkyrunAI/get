@@ -50,6 +50,15 @@ tailscale up --ssh --advertise-tags=tag:vehicle \
 # The fleet hands this board its desired state, which carries the update command
 # itself. Running that command rather than repeating what it does means one
 # answer to how a board updates instead of two that drift.
+# tailscale up returns before MagicDNS can answer, and the next line asks for
+# the fleet by name. Found re-enrolling weka: the join succeeded and the update
+# died on "Could not resolve host: rookery2" a second later.
+echo "== waiting for the fleet"
+i=0
+while [ $i -lt 30 ] && ! curl -fsS -o /dev/null --max-time 5 "http://$FLEET/state"; do
+    i=$((i + 1)); sleep 2
+done
+
 echo "== first update"
 install -d /var/lib/rookery2
 curl -fsS "http://$FLEET/state" | tar -xzf - -C /var/lib/rookery2
