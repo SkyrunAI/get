@@ -7,6 +7,7 @@
 # fetches its own state, as it always does.
 #
 # Pass ssh anything it needs in SSH_OPTS, e.g. SSH_OPTS="-i ~/.ssh/board_key".
+# A board whose sudo wants a password takes it in SUDO_PW, the same way.
 set -eu
 
 FLEET="${ROOKERY2_FLEET:-rookery2:5000}"
@@ -28,7 +29,20 @@ install -m 755 "$d/ansible/roles/update/files/rookery2-update" /usr/local/sbin/
 rm -rf "$d"
 rookery2-update
 '
+# sudo -S reads its password from the first line and hands the rest to the
+# shell, so a password rides the same stream as the script. A board with
+# passwordless sudo wants no first line.
+if [ -n "${SUDO_PW:-}" ]; then
+    elevate='sudo -S -p "" sh -s'
+    password="$SUDO_PW
+"
+else
+    elevate='sudo sh -s'
+    password=""
+fi
+
 {
+    printf '%s' "$password"
     printf 'FLEET=%s\n' "$FLEET"
     printf '%s' "$REMOTE"
-} | ssh ${SSH_OPTS:-} "$1" 'sudo sh -s'
+} | ssh ${SSH_OPTS:-} "$1" "$elevate"
