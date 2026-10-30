@@ -11,8 +11,7 @@
 # the rest, so that enrolment is described in one place and this stays short.
 set -eu
 
-REPO="${ROOKERY2_REPO:-git@github.com:SkyrunAI/rookery2.git}"
-KEY=/etc/skyrun/id_ed25519
+FLEET="${ROOKERY2_FLEET:-rookery2:5000}"
 
 [ "$(id -u)" -eq 0 ] || { echo "run this as root" >&2; exit 1; }
 
@@ -23,34 +22,21 @@ KEY=/etc/skyrun/id_ed25519
 # not the distro marks its python externally managed.
 echo "== installing what an update needs"
 apt-get update -q
-DEBIAN_FRONTEND=noninteractive apt-get install -yq git curl python3-pip
+DEBIAN_FRONTEND=noninteractive apt-get install -yq curl python3-pip python3-requests
 python3 -m pip install --break-system-packages --upgrade ansible-core
+# The play starts containers through community.docker, which ansible-core does
+# not carry; its modules reach the daemon through python3-requests. Without the
+# collection the update fails while loading, before it names the board.
+ansible-galaxy collection install community.docker
 
-# No key, no pull. Make one, print it, and stop — a person has to add it, and
-# that is the only point in this where the board waits on someone.
-install -d -m 700 /etc/skyrun
-if [ ! -f "$KEY" ]; then
-    ssh-keygen -q -t ed25519 -N '' -C "rookery2@$(cat /etc/machine-id)" -f "$KEY"
-    cat <<MSG
+# A class runs what it names in containers, and the update stops on a board with
+# no runtime rather than install one. A runtime already here is kept: on a
+# Jetson it may be the vendor's.
+command -v docker >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -yq docker.io
 
-New deploy key. Add it READ-ONLY at:
-  https://github.com/SkyrunAI/rookery2/settings/keys
-
-$(cat "$KEY.pub")
-
-Then run this line again.
-MSG
-    exit 0
-fi
-
-# The first update. It names the board from its serial, writes the identity
-# record, and installs rookery2-update and rookery2-auto-update.
-echo "== first update"
-export GIT_SSH_COMMAND="ssh -i $KEY -o StrictHostKeyChecking=accept-new"
-ansible-pull -U "$REPO" -C main -d /var/lib/rookery2 local.yml
-
-# After the update, so it registers under the name the board just took rather
-# than whatever L4T shipped with.
+# Before the update, because the tailnet is what authorises the pull: the board
+# holds no credential for the fleet, and being on the network is the whole of
+# its claim (ADR 0001).
 #
 # The tag is the point: it carries the vehicle permissions and Tailscale SSH, so
 # who may reach this board is an ACL on the tailnet and not a rule kept here. A
@@ -60,6 +46,23 @@ echo "== tailnet"
 command -v tailscale >/dev/null || curl -fsSL https://tailscale.com/install.sh | sh
 tailscale up --ssh --advertise-tags=tag:vehicle \
     ${TS_AUTHKEY:+--authkey "$TS_AUTHKEY"} --hostname "$(hostnamectl --static)"
+
+# The fleet hands this board its desired state, which carries the update command
+# itself. Running that command rather than repeating what it does means one
+# answer to how a board updates instead of two that drift.
+echo "== first update"
+install -d /var/lib/rookery2
+curl -fsS "http://$FLEET/state" | tar -xzf - -C /var/lib/rookery2
+install -m 755 /var/lib/rookery2/ansible/roles/update/files/rookery2-update /usr/local/sbin/
+rookery2-update
+
+# The update names the board from its serial, and the tailnet node took whatever
+# name L4T shipped with. Rename it, so the fleet knows this board by the name its
+# own silicon gave it — which is also the name fetch matches a caller against.
+#
+# `set`, not a second `up`: a board reached only over the tailnet should not be
+# asked to reauthenticate to change one field.
+tailscale set --hostname="$(hostnamectl --static)"
 
 cat <<MSG
 
