@@ -23,8 +23,17 @@ KEY=/etc/skyrun/id_ed25519
 # not the distro marks its python externally managed.
 echo "== installing what an update needs"
 apt-get update -q
-DEBIAN_FRONTEND=noninteractive apt-get install -yq git curl python3-pip
+DEBIAN_FRONTEND=noninteractive apt-get install -yq git curl python3-pip python3-requests
 python3 -m pip install --break-system-packages --upgrade ansible-core
+# The play starts containers through community.docker, which ansible-core does
+# not carry; its modules reach the daemon through python3-requests. Without the
+# collection the update fails while loading, before it names the board.
+ansible-galaxy collection install community.docker
+
+# A class runs what it names in containers, and the update stops on a board with
+# no runtime rather than install one. A runtime already here is kept: on a
+# Jetson it may be the vendor's.
+command -v docker >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -yq docker.io
 
 # No key, no pull. Make one, print it, and stop — a person has to add it, and
 # that is the only point in this where the board waits on someone.
