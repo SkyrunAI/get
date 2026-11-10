@@ -41,9 +41,28 @@ command -v docker >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -
 # The tag is the point: it carries the vehicle permissions and Tailscale SSH, so
 # who may reach this board is an ACL on the tailnet and not a rule kept here. A
 # tagged node belongs to the tag, so it does not expire with whoever enrolled it.
-# TS_AUTHKEY has to be allowed to advertise the tag.
+# TS_AUTHKEY has to be allowed to advertise the tag, and it has to be
+# reusable, pre-approved and NOT ephemeral. Tailscale deletes an ephemeral
+# node once its board has been off long enough, and the board then has no
+# node to come back to.
 echo "== tailnet"
 command -v tailscale >/dev/null || curl -fsSL https://tailscale.com/install.sh | sh
+
+# The board keeps this key, and it is the only thing it keeps. Tailscale
+# deleted three nodes while their boards were powered off, and each board came
+# back needing a login nobody was there to give it (rookery2#274). The first
+# update below installs rookery2-tailnet, which reads the key from here every
+# minute until the board is back on the tailnet.
+#
+# Root-only, created empty at that mode before anything is written into it, so
+# the key is never in a world-readable file even for an instant. printf is the
+# shell's own, so the key is on no command line either.
+if [ -n "${TS_AUTHKEY:-}" ]; then
+    install -d -m 755 /etc/skyrun
+    install -m 600 /dev/null /etc/skyrun/tailnet-authkey
+    printf '%s\n' "$TS_AUTHKEY" > /etc/skyrun/tailnet-authkey
+fi
+
 tailscale up --ssh --advertise-tags=tag:vehicle \
     ${TS_AUTHKEY:+--authkey "$TS_AUTHKEY"} --hostname "$(hostnamectl --static)"
 

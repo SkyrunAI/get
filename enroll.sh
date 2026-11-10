@@ -3,8 +3,11 @@
 #
 # Enrol a Jetson from your own machine. You are on the tailnet and the board is
 # not, so you are how the key reaches it: this ssh's in over the local network
-# and runs jetson.sh there with the key in its environment. The board writes it
-# nowhere.
+# and runs jetson.sh there with the key in its environment.
+#
+# The board keeps the key, root-only, and that is the only thing it keeps.
+# Tailscale deletes a node while its board is off, and the board needs the key
+# to log in again on its own (rookery2#274).
 #
 # The key is read from your environment and never passed as an argument: argv is
 # world-readable through /proc, and this key enrols a node as tag:vehicle.
