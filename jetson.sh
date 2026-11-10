@@ -72,25 +72,33 @@ if [ -n "${TS_AUTHKEY:-}" ]; then
     printf '%s\n' "$TS_AUTHKEY" > "$STAGED"
 fi
 
-# Whether this board was already on the tailnet, read before the join. It
-# decides whether the join below says anything about the key: see the promotion.
+# What this board was before the join, read before it. It decides whether the
+# join says anything about the key: see the promotion.
 was=$(tailscale status --json 2>/dev/null |
     sed -n 's/.*"BackendState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 tailscale up --ssh --advertise-tags=tag:vehicle \
     ${TS_AUTHKEY:+--auth-key="file:$STAGED"} --hostname "$(hostnamectl --static)"
 
-# `tailscale up` returns at once on a node that is already Running, without
-# asking the control server anything, so on such a board it is no evidence the
-# key is good. Keep what that board already has rather than overwrite a working
-# key with one nothing checked — unless it has none, which is every board
-# enrolled before the key was kept at all.
+# Only a board that had to log in has told us anything about this key. A node
+# that is already Running gets an immediate yes without the control server
+# being asked, and a Stopped one is still logged in, so starting it uses the
+# login it already had. Either way the key went unchecked, and overwriting a
+# working key with an unchecked one is how a board stops being able to recover.
+#
+# A board with no key at all is the exception: every board enrolled before the
+# key was kept has none, and an unchecked key beats nothing.
+case "$was" in
+Running | Stopped) checked=no ;;
+*) checked=yes ;;
+esac
+
 if [ -n "${TS_AUTHKEY:-}" ]; then
-    if [ "$was" != Running ] || [ ! -e "$KEY" ]; then
+    if [ "$checked" = yes ] || [ ! -e "$KEY" ]; then
         mv -f "$STAGED" "$KEY"
         echo "== the key this board recovers with is at $KEY"
     else
-        echo "== already on the tailnet, so this key was never checked."
+        echo "== this board did not have to log in, so the key went unchecked."
         echo "   Keeping the one at $KEY. To replace it, see rookery2's"
         echo "   docs/provisioning-a-board.md."
     fi

@@ -99,6 +99,24 @@ run "$NEW" || no "re-running on a healthy board failed: $(tail -3 /tmp/run.log)"
 [ "$(cat "$KEY")" = "$OLD" ] || no "an unchecked key overwrote the one that works"
 echo "   ok"
 
+echo "== on a stopped board the key is kept too: it is still logged in"
+# Stopped is a client that is logged in and switched off. Starting it uses the
+# login it already had, so the key it was handed went just as unchecked.
+printf '%s\n' "$OLD" > "$KEY"; chmod 600 "$KEY"
+tailscale_says ok Stopped
+run "$NEW" || no "re-running on a stopped board failed: $(tail -3 /tmp/run.log)"
+[ "$(cat "$KEY")" = "$OLD" ] || no "an unchecked key overwrote the one that works"
+echo "   ok"
+
+echo "== a board on the tailnet with no key gets one, unchecked or not"
+# Every board enrolled before the key was kept is this board. An unchecked key
+# beats no key: without one it cannot log itself back in at all.
+rm -f "$KEY"
+tailscale_says ok Running
+run "$NEW" || no "seeding a healthy board failed: $(tail -3 /tmp/run.log)"
+[ "$(cat "$KEY")" = "$NEW" ] || no "a board with no key was left with none"
+echo "   ok"
+
 echo "== the key is root-only"
 [ "$(stat -c %a "$KEY")" = 600 ] || no "the key is $(stat -c %a "$KEY"), not 600"
 echo "   ok"
