@@ -1,0 +1,29 @@
+# These scripts are how a board joins the tailnet at all, and the key one of
+# them leaves behind is how it rejoins after the control server forgets it.
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: the scripts are valid shell
+        run: |
+          for s in *.sh; do sh -n "$s"; done
+
+      # A disposable board, like the ones rookery2's suites use: the test
+      # writes /etc/skyrun and /usr/local/sbin.
+      - name: a key that will not join never replaces one that works
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" debian:trixie-slim \
+            sh -c 'apt-get update -qq >/dev/null &&
+                   apt-get install -yqq coreutils >/dev/null &&
+                   cp -r /repo /work && cd /work &&
+                   sh .github/enrolment-test.sh'

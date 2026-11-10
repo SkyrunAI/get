@@ -54,17 +54,47 @@ command -v tailscale >/dev/null || curl -fsSL https://tailscale.com/install.sh |
 # update below installs rookery2-tailnet, which reads the key from here every
 # minute until the board is back on the tailnet.
 #
+# Staged first, kept only if the join works. A board that already has a working
+# key must not lose it to one that does not join: it would then be a board that
+# cannot recover, which is the fault this whole thing exists to fix.
+#
 # Root-only, created empty at that mode before anything is written into it, so
 # the key is never in a world-readable file even for an instant. printf is the
-# shell's own, so the key is on no command line either.
+# shell's own and tailscale reads the file, so the key is on no command line at
+# either end — argv is world-readable through /proc.
+KEY=/etc/skyrun/tailnet-authkey
+STAGED=$KEY.staged
+trap 'rm -f "$STAGED"' EXIT
+
 if [ -n "${TS_AUTHKEY:-}" ]; then
     install -d -m 755 /etc/skyrun
-    install -m 600 /dev/null /etc/skyrun/tailnet-authkey
-    printf '%s\n' "$TS_AUTHKEY" > /etc/skyrun/tailnet-authkey
+    install -m 600 /dev/null "$STAGED"
+    printf '%s\n' "$TS_AUTHKEY" > "$STAGED"
 fi
 
+# Whether this board was already on the tailnet, read before the join. It
+# decides whether the join below says anything about the key: see the promotion.
+was=$(tailscale status --json 2>/dev/null |
+    sed -n 's/.*"BackendState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
 tailscale up --ssh --advertise-tags=tag:vehicle \
-    ${TS_AUTHKEY:+--authkey "$TS_AUTHKEY"} --hostname "$(hostnamectl --static)"
+    ${TS_AUTHKEY:+--auth-key="file:$STAGED"} --hostname "$(hostnamectl --static)"
+
+# `tailscale up` returns at once on a node that is already Running, without
+# asking the control server anything, so on such a board it is no evidence the
+# key is good. Keep what that board already has rather than overwrite a working
+# key with one nothing checked — unless it has none, which is every board
+# enrolled before the key was kept at all.
+if [ -n "${TS_AUTHKEY:-}" ]; then
+    if [ "$was" != Running ] || [ ! -e "$KEY" ]; then
+        mv -f "$STAGED" "$KEY"
+        echo "== the key this board recovers with is at $KEY"
+    else
+        echo "== already on the tailnet, so this key was never checked."
+        echo "   Keeping the one at $KEY. To replace it, see rookery2's"
+        echo "   docs/provisioning-a-board.md."
+    fi
+fi
 
 # The fleet hands this board its desired state, which carries the update command
 # itself. Running that command rather than repeating what it does means one
