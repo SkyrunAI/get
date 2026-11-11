@@ -41,11 +41,68 @@ command -v docker >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -
 # The tag is the point: it carries the vehicle permissions and Tailscale SSH, so
 # who may reach this board is an ACL on the tailnet and not a rule kept here. A
 # tagged node belongs to the tag, so it does not expire with whoever enrolled it.
-# TS_AUTHKEY has to be allowed to advertise the tag.
+# TS_AUTHKEY has to be allowed to advertise the tag, and it has to be
+# reusable, pre-approved and NOT ephemeral. Tailscale deletes an ephemeral
+# node once its board has been off long enough, and the board then has no
+# node to come back to.
 echo "== tailnet"
 command -v tailscale >/dev/null || curl -fsSL https://tailscale.com/install.sh | sh
+
+# The board keeps this key, and it is the only thing it keeps. Tailscale
+# deleted three nodes while their boards were powered off, and each board came
+# back needing a login nobody was there to give it (rookery2#274). The first
+# update below installs rookery2-tailnet, which reads the key from here every
+# minute until the board is back on the tailnet.
+#
+# Staged first, kept only if the join works. A board that already has a working
+# key must not lose it to one that does not join: it would then be a board that
+# cannot recover, which is the fault this whole thing exists to fix.
+#
+# Root-only, created empty at that mode before anything is written into it, so
+# the key is never in a world-readable file even for an instant. printf is the
+# shell's own and tailscale reads the file, so the key is on no command line at
+# either end — argv is world-readable through /proc.
+KEY=/etc/skyrun/tailnet-authkey
+STAGED=$KEY.staged
+trap 'rm -f "$STAGED"' EXIT
+
+if [ -n "${TS_AUTHKEY:-}" ]; then
+    install -d -m 755 /etc/skyrun
+    install -m 600 /dev/null "$STAGED"
+    printf '%s\n' "$TS_AUTHKEY" > "$STAGED"
+fi
+
+# What this board was before the join, read before it. It decides whether the
+# join says anything about the key: see the promotion.
+was=$(tailscale status --json 2>/dev/null |
+    sed -n 's/.*"BackendState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
 tailscale up --ssh --advertise-tags=tag:vehicle \
-    ${TS_AUTHKEY:+--authkey "$TS_AUTHKEY"} --hostname "$(hostnamectl --static)"
+    ${TS_AUTHKEY:+--auth-key="file:$STAGED"} --hostname "$(hostnamectl --static)"
+
+# Only a board that had to log in has told us anything about this key. A node
+# that is already Running gets an immediate yes without the control server
+# being asked, and a Stopped one is still logged in, so starting it uses the
+# login it already had. Either way the key went unchecked, and overwriting a
+# working key with an unchecked one is how a board stops being able to recover.
+#
+# A board with no key at all is the exception: every board enrolled before the
+# key was kept has none, and an unchecked key beats nothing.
+case "$was" in
+Running | Stopped) checked=no ;;
+*) checked=yes ;;
+esac
+
+if [ -n "${TS_AUTHKEY:-}" ]; then
+    if [ "$checked" = yes ] || [ ! -e "$KEY" ]; then
+        mv -f "$STAGED" "$KEY"
+        echo "== the key this board recovers with is at $KEY"
+    else
+        echo "== this board did not have to log in, so the key went unchecked."
+        echo "   Keeping the one at $KEY. To replace it, see rookery2's"
+        echo "   docs/provisioning-a-board.md."
+    fi
+fi
 
 # The fleet hands this board its desired state, which carries the update command
 # itself. Running that command rather than repeating what it does means one
