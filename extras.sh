@@ -25,8 +25,9 @@ command -v claude >/dev/null || {
 claude plugin marketplace update skyrun-local
 
 claude plugin install skyrun-extras@skyrun-local || {
-    echo "skyrun-local has no skyrun-extras yet, so your kit copy is behind." >&2
-    echo "Run workstation.sh to bring it up to date, then run this line again." >&2
+    echo "skyrun-local has no skyrun-extras, so the kit copy it reads is behind." >&2
+    echo "That copy is $HOME/github/SkyrunAI/skyrun-setup. Converge fast-forwards it" >&2
+    echo "only when it is clean and on main, so put it on main, pull, run this again." >&2
     exit 1
 }
 
