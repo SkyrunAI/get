@@ -1,11 +1,10 @@
 #!/bin/sh
 # curl -fsSL https://raw.githubusercontent.com/SkyrunAI/get/main/extras.sh | sh
 #
-# Add the extras to a Mac that already ran workstation.sh: Pinrail, GitButler
-# and SkillOpt-Sleep, plus the rules that tell Claude to ask through Pinrail.
+# Add GitButler, SkillOpt-Sleep and iTAK setup after workstation.sh.
 #
 # Installing the skyrun-extras plugin is the whole switch. Setup reads the list
-# of installed plugins and installs the three apps when it sees that name, so
+# of installed plugins and runs the extras when it sees that name, so
 # every converge from here on keeps them.
 
 set -eu
@@ -20,14 +19,11 @@ command -v claude >/dev/null || {
     exit 1
 }
 
-# The marketplace is a folder on this Mac, ~/github/SkyrunAI/skyrun-setup.
-# Re-read it, in case setup has pulled a newer kit since Claude last looked.
+# Refresh the marketplace before installing Extras.
 claude plugin marketplace update skyrun-local
 
 claude plugin install skyrun-extras@skyrun-local || {
-    echo "skyrun-local has no skyrun-extras, so the kit copy it reads is behind." >&2
-    echo "That copy is $HOME/github/SkyrunAI/skyrun-setup. Converge fast-forwards it" >&2
-    echo "only when it is clean and on main, so put it on main, pull, run this again." >&2
+    echo "Could not install skyrun-extras from skyrun-local. Check the error above." >&2
     exit 1
 }
 
@@ -35,4 +31,4 @@ uvx --from ansible-core ansible-pull \
     -U https://github.com/SkyrunAI/skyrun-setup.git \
     -d "$HOME/.local/share/skyrun-setup" local.yml
 
-echo "Done. Open Pinrail and run its Connect step for Claude and Codex."
+echo "Skyrun Extras setup finished."
